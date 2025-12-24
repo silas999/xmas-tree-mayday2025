@@ -1,0 +1,700 @@
+<!DOCTYPE html>
+<html lang="zh">
+<head>
+    <meta charset="UTF-8">
+    <title>Christmas Tree V3 - Texture Ready & Crisp Text</title>
+    <style>
+        body { margin: 0; overflow: hidden; background-color: #000103; font-family: 'Segoe UI', sans-serif; }
+        #canvas-container { width: 100vw; height: 100vh; }
+        
+        #editor {
+            position: absolute;
+            top: 20px;
+            right: 20px;
+            width: 280px;
+            max-height: 85vh;
+            overflow-y: auto;
+            background: rgba(0, 12, 30, 0.85);
+            padding: 20px;
+            border: 1px solid #00d2ff;
+            border-radius: 12px;
+            color: white;
+            box-shadow: 0 0 30px rgba(0, 210, 255, 0.15);
+            backdrop-filter: blur(12px);
+            z-index: 100;
+        }
+        #editor::-webkit-scrollbar { width: 4px; }
+        #editor::-webkit-scrollbar-thumb { background: #00d2ff; border-radius: 2px; }
+
+        h3 { 
+            margin-top: 0; 
+            color: #00d2ff; 
+            text-align: center; 
+            font-size: 18px;
+            letter-spacing: 1px;
+            text-shadow: 0 0 10px rgba(0, 210, 255, 0.5);
+            margin-bottom: 20px;
+            border-bottom: 1px solid rgba(0, 210, 255, 0.3);
+            padding-bottom: 10px;
+        }
+        
+        .input-group { margin-bottom: 15px; }
+        label { 
+            display: block; 
+            font-size: 12px; 
+            margin-bottom: 5px; 
+            color: #80c0ff; 
+        }
+        input { 
+            width: 100%; 
+            padding: 8px 10px; 
+            background: rgba(0, 30, 60, 0.6); 
+            border: 1px solid #005588; 
+            color: #e0f0ff; 
+            border-radius: 6px;
+            font-size: 14px;
+        }
+        input:focus { 
+            outline: none; 
+            border-color: #00d2ff; 
+            box-shadow: 0 0 10px rgba(0, 210, 255, 0.4); 
+        }
+    </style>
+</head>
+<body>
+
+<div id="canvas-container"></div>
+
+<div id="editor">
+    <h3>🎄 圣诞树配置</h3>
+    <div id="inputs-container"></div>
+</div>
+
+<script type="importmap">
+  {
+    "imports": {
+      "three": "https://unpkg.com/three@0.160.0/build/three.module.js",
+      "three/addons/": "https://unpkg.com/three@0.160.0/examples/jsm/"
+    }
+  }
+</script>
+
+<script type="module">
+    import * as THREE from 'three';
+    import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
+    import { EffectComposer } from 'three/addons/postprocessing/EffectComposer.js';
+    import { RenderPass } from 'three/addons/postprocessing/RenderPass.js';
+    import { UnrealBloomPass } from 'three/addons/postprocessing/UnrealBloomPass.js';
+
+    function createParticleTexture() {
+        const canvas = document.createElement('canvas');
+        canvas.width = 128; canvas.height = 128;
+        const ctx = canvas.getContext('2d');
+        const gradient = ctx.createRadialGradient(64, 64, 0, 64, 64, 64);
+        gradient.addColorStop(0, 'rgba(255,255,255,1)');
+        gradient.addColorStop(0.15, 'rgba(255,255,230,0.9)');
+        gradient.addColorStop(0.4, 'rgba(255,220,100,0.4)');
+        gradient.addColorStop(1, 'rgba(0,0,0,0)');
+        ctx.fillStyle = gradient;
+        ctx.fillRect(0,0,128,128);
+        return new THREE.CanvasTexture(canvas);
+    }
+    const particleTexture = createParticleTexture();
+
+    const scene = new THREE.Scene();
+    scene.fog = new THREE.FogExp2(0x000103, 0.005); 
+
+    const camera = new THREE.PerspectiveCamera(55, window.innerWidth / window.innerHeight, 0.1, 2000); 
+    camera.position.set(0, 15, 70); 
+
+    const renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true });
+    renderer.setSize(window.innerWidth, window.innerHeight);
+    renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+    renderer.toneMapping = THREE.ACESFilmicToneMapping;
+    renderer.toneMappingExposure = 1.0; // 曝光度稍微调低一点，防过曝
+    document.getElementById('canvas-container').appendChild(renderer.domElement);
+
+    const controls = new OrbitControls(camera, renderer.domElement);
+    controls.enableDamping = true;
+    controls.autoRotate = true;
+    controls.autoRotateSpeed = 0.4;
+    controls.maxPolarAngle = Math.PI / 2 - 0.05;
+    controls.target.set(0, 10, 0);
+
+    const treeGroup = new THREE.Group();
+    scene.add(treeGroup);
+
+    // --- 1. 圣诞树主体 ---
+    function createSparseTree() {
+        const geometry = new THREE.BufferGeometry();
+        const count = 4500;
+        const positions = [];
+        const colors = [];
+        const sizes = [];
+        const colorObj = new THREE.Color();
+
+        for (let i = 0; i < count; i++) {
+            const height = 45;
+            const t = Math.pow(Math.random(), 1.5);
+            const y = t * height - (height * 0.5); 
+            const relY = (y + height * 0.5) / height;
+            
+            const maxRadius = 20 * Math.pow(1 - relY, 1.2);
+            const r = maxRadius * (0.75 + Math.random() * 0.3);
+            const angle = Math.random() * Math.PI * 2;
+
+            positions.push(Math.cos(angle)*r, y, Math.sin(angle)*r);
+
+            const hue = 0.1 + Math.random() * 0.08;
+            const saturation = 0.8 + Math.random() * 0.2;
+            const lightness = 0.4 + Math.random() * 0.4;
+            colorObj.setHSL(hue, saturation, lightness);
+            colors.push(colorObj.r, colorObj.g, colorObj.b);
+            
+            sizes.push(1.5 + Math.random() * 2.0);
+        }
+
+        geometry.setAttribute('position', new THREE.Float32BufferAttribute(positions, 3));
+        geometry.setAttribute('color', new THREE.Float32BufferAttribute(colors, 3));
+        geometry.setAttribute('size', new THREE.Float32BufferAttribute(sizes, 1));
+
+        const material = new THREE.PointsMaterial({
+            size: 1.0,
+            map: particleTexture,
+            vertexColors: true,
+            blending: THREE.AdditiveBlending,
+            depthWrite: false,
+            transparent: true,
+            opacity: 0.95
+        });
+
+        const tree = new THREE.Points(geometry, material);
+        treeGroup.add(tree);
+    }
+    createSparseTree();
+
+    // --- 2. 顶部五角星 ---
+    let starParticles;
+    function createParticleStar() {
+        const outerRadius = 6.5;
+        const innerRadius = 3.0;
+        const starPoints = [];
+        
+        const vertices = [];
+        const steps = 5;
+        const stepAngle = Math.PI / steps;
+        let rot = -Math.PI / 2;
+        
+        for (let i = 0; i < 5; i++) {
+             vertices.push({x: Math.cos(rot) * outerRadius, y: Math.sin(rot) * outerRadius});
+             rot += stepAngle;
+             vertices.push({x: Math.cos(rot) * innerRadius, y: Math.sin(rot) * innerRadius});
+             rot += stepAngle;
+        }
+        vertices.push(vertices[0]);
+
+        const particlesPerLine = 400;
+        for(let i=0; i<10; i++) {
+            const start = vertices[i];
+            const end = vertices[i+1];
+            for(let j=0; j<=particlesPerLine; j++) {
+                const t = j / particlesPerLine;
+                const jitter = (Math.random() - 0.5) * 0.4;
+                starPoints.push(
+                    start.x + (end.x - start.x) * t + jitter, 
+                    start.y + (end.y - start.y) * t + jitter, 
+                    (Math.random()-0.5) * 1.0
+                );
+            }
+        }
+
+        const internalParticlesCount = 3000;
+        for(let i=0; i<internalParticlesCount; i++) {
+            const angle = Math.random() * Math.PI * 2;
+            const r = innerRadius * Math.pow(Math.random(), 0.6) * 1.4; 
+            starPoints.push(
+                Math.cos(angle) * r,
+                Math.sin(angle) * r,
+                (Math.random()-0.5) * 2.5 
+            );
+        }
+        
+        const starGeo = new THREE.BufferGeometry();
+        starGeo.setAttribute('position', new THREE.Float32BufferAttribute(starPoints, 3));
+        
+        const starMat = new THREE.PointsMaterial({
+            color: 0x00eaff, 
+            size: 0.55,
+            transparent: true,
+            opacity: 1.0,
+            blending: THREE.AdditiveBlending,
+            map: particleTexture
+        });
+        
+        starParticles = new THREE.Points(starGeo, starMat);
+        starParticles.position.set(0, 23, 0);
+        scene.add(starParticles);
+    }
+    createParticleStar();
+
+    // --- 3. 底部无限正方形波浪 ---
+    let floorPoints;
+    function createWaveFloor() {
+        const geometry = new THREE.BufferGeometry();
+        const positions = [];
+        const sizes = [];
+        
+        // 范围 1000x1000
+        const width = 1000; 
+        const depth = 1000;
+        // 密度
+        const countX = 300; 
+        const countZ = 300;
+        
+        for(let ix=0; ix<countX; ix++) {
+            for(let iz=0; iz<countZ; iz++) {
+                const x = (ix / countX - 0.5) * width;
+                const z = (iz / countZ - 0.5) * depth;
+                positions.push(x, -25, z);
+                sizes.push(1.0 + Math.random() * 1.5);
+            }
+        }
+        
+        geometry.setAttribute('position', new THREE.Float32BufferAttribute(positions, 3));
+        geometry.setAttribute('size', new THREE.Float32BufferAttribute(sizes, 1));
+        
+        const material = new THREE.PointsMaterial({
+            size: 2.2, 
+            color: 0x0055bb,
+            map: particleTexture,
+            blending: THREE.AdditiveBlending,
+            depthWrite: false,
+            transparent: true,
+            opacity: 0.7
+        });
+        
+        floorPoints = new THREE.Points(geometry, material);
+        scene.add(floorPoints);
+    }
+    createWaveFloor();
+
+    // --- 4. 背景星星 ---
+    let bgStars;
+    function createBackgroundStars() {
+        const geometry = new THREE.BufferGeometry();
+        const positions = [];
+        const colors = [];
+        const sizes = [];
+        const initialSizes = [];
+        
+        for(let i=0; i<5000; i++) {
+            const r = 100 + Math.random() * 300; 
+            const theta = Math.random() * Math.PI * 2;
+            const phi = Math.acos(2 * Math.random() - 1);
+            
+            positions.push(
+                r * Math.sin(phi) * Math.cos(theta),
+                r * Math.sin(phi) * Math.sin(theta),
+                r * Math.cos(phi)
+            );
+            
+            const color = new THREE.Color();
+            color.setHSL(0.6 + Math.random()*0.1, 0.6, 0.9);
+            colors.push(color.r, color.g, color.b);
+            
+            const size = 2.0 + Math.random() * 3.0; 
+            sizes.push(size);
+            initialSizes.push(size);
+        }
+        
+        geometry.setAttribute('position', new THREE.Float32BufferAttribute(positions, 3));
+        geometry.setAttribute('color', new THREE.Float32BufferAttribute(colors, 3));
+        geometry.setAttribute('size', new THREE.Float32BufferAttribute(sizes, 1));
+        geometry.userData.initialSizes = initialSizes;
+
+        const material = new THREE.PointsMaterial({
+            vertexColors: true,
+            map: particleTexture,
+            transparent: true,
+            opacity: 1.0,
+            blending: THREE.AdditiveBlending
+        });
+        
+        bgStars = new THREE.Points(geometry, material);
+        scene.add(bgStars);
+    }
+    createBackgroundStars();
+
+    // --- 5. 吉祥物绘制 (Texture/Canvas 双模式) ---
+    // 为了实现“把贴图放进去”，这里预留了接口。
+    // 如果您有Base64，可以直接替换下方的 Canvas 逻辑。
+    // 目前我重新写了 Canvas 逻辑，模仿图4的圆胡萝卜。
+    function createMascotTexture(type) {
+        // 如果您想使用真实图片，请将图片转为 Base64 字符串，
+        // 然后取消下面这段注释，并填入您的 Base64：
+        /*
+        if (type === 'carrot') {
+           return new THREE.TextureLoader().load('data:image/png;base64,您的胡萝卜图片Base64...');
+        }
+        */
+
+        const canvas = document.createElement('canvas');
+        canvas.width = 512; canvas.height = 512;
+        const ctx = canvas.getContext('2d');
+        const cx = 256; const cy = 256;
+
+        // 去掉过强的模糊，让形象更清晰
+        ctx.shadowBlur = 10;
+        
+        if (type === 'carrot') {
+            // 模仿图4：圆球状，橙色
+            ctx.shadowColor = '#cc6600';
+            
+            // 身体：正圆
+            const grad = ctx.createRadialGradient(cx-30, cy-30, 20, cx, cy, 140);
+            grad.addColorStop(0, '#ffaa44');
+            grad.addColorStop(1, '#ff7700');
+            ctx.fillStyle = grad;
+            ctx.beginPath();
+            ctx.arc(cx, cy + 40, 140, 0, Math.PI * 2);
+            ctx.fill();
+            
+            // 叶子：图4是三瓣竖起来的厚叶子
+            ctx.shadowColor = 'rgba(0,0,0,0.2)';
+            ctx.fillStyle = '#66dd00'; // 嫩绿
+            
+            // 左叶
+            ctx.beginPath();
+            ctx.ellipse(cx - 50, cy - 110, 35, 70, -0.4, 0, Math.PI*2);
+            ctx.fill();
+            // 右叶
+            ctx.beginPath();
+            ctx.ellipse(cx + 50, cy - 110, 35, 70, 0.4, 0, Math.PI*2);
+            ctx.fill();
+            // 中叶 (最高)
+            ctx.beginPath();
+            ctx.ellipse(cx, cy - 130, 40, 80, 0, 0, Math.PI*2);
+            ctx.fill();
+            
+            // 叶脉细节 (画线)
+            ctx.strokeStyle = '#44aa00';
+            ctx.lineWidth = 3;
+            ctx.beginPath(); ctx.moveTo(cx, cy-130); ctx.lineTo(cx, cy-180); ctx.stroke();
+
+            // 眼睛：图4是大大的竖椭圆，蓝色眼珠
+            ctx.shadowBlur = 0;
+            // 眼白
+            ctx.fillStyle = 'white';
+            ctx.beginPath(); ctx.ellipse(cx - 45, cy + 20, 35, 45, 0, 0, Math.PI*2); ctx.fill();
+            ctx.beginPath(); ctx.ellipse(cx + 45, cy + 20, 35, 45, 0, 0, Math.PI*2); ctx.fill();
+            // 蓝眼珠
+            ctx.fillStyle = '#0088ff';
+            ctx.beginPath(); ctx.ellipse(cx - 45, cy + 20, 18, 25, 0, 0, Math.PI*2); ctx.fill();
+            ctx.beginPath(); ctx.ellipse(cx + 45, cy + 20, 18, 25, 0, 0, Math.PI*2); ctx.fill();
+            
+            // 嘴巴：图4是小歪嘴
+            ctx.strokeStyle = '#331100';
+            ctx.lineWidth = 6;
+            ctx.lineCap = 'round';
+            ctx.beginPath(); 
+            ctx.moveTo(cx - 20, cy + 80);
+            ctx.lineTo(cx + 20, cy + 80);
+            ctx.lineTo(cx + 25, cy + 75); // 嘴角上扬
+            ctx.stroke();
+
+        } else if (type === 'peas') {
+            // (其他吉祥物代码保持)
+            ctx.shadowColor = '#44aa44';
+            ctx.fillStyle = '#44aa44';
+            ctx.beginPath(); ctx.ellipse(cx, cy, 180, 80, -0.3, 0, Math.PI*2); ctx.fill();
+            ctx.fillStyle = '#99dd55'; ctx.shadowColor = '#99dd55';
+            for(let i=-1; i<=1; i++) {
+                ctx.beginPath(); ctx.arc(cx + i*60 - 20, cy - i*20, 45, 0, Math.PI*2); ctx.fill();
+                ctx.shadowBlur = 0; ctx.fillStyle = '#225500';
+                ctx.beginPath(); ctx.arc(cx + i*60 - 35, cy - i*20 - 5, 5, 0, Math.PI*2); ctx.fill();
+                ctx.beginPath(); ctx.arc(cx + i*60 - 5, cy - i*20 - 5, 5, 0, Math.PI*2); ctx.fill();
+            }
+        } else if (type === 'banana') {
+            ctx.shadowColor = '#ffe600';
+            ctx.fillStyle = '#ffe600';
+            ctx.beginPath();
+            ctx.moveTo(cx - 100, cy - 100);
+            ctx.quadraticCurveTo(cx, cy + 100, cx + 120, cy - 120);
+            ctx.quadraticCurveTo(cx + 50, cy + 200, cx - 120, cy - 80);
+            ctx.fill();
+            ctx.shadowBlur = 0; ctx.fillStyle = '#333';
+            ctx.beginPath(); ctx.arc(cx - 20, cy + 20, 12, 0, Math.PI*2); ctx.fill();
+            ctx.beginPath(); ctx.arc(cx + 40, cy + 10, 12, 0, Math.PI*2); ctx.fill();
+            ctx.strokeStyle = '#333'; ctx.lineWidth = 6;
+            ctx.beginPath(); ctx.arc(cx + 10, cy + 40, 30, 0.2, Math.PI-0.2); ctx.stroke();
+        } else if (type === 'pear') {
+            ctx.shadowColor = '#bbee00';
+            ctx.fillStyle = '#bbee00';
+            ctx.beginPath(); ctx.arc(cx, cy + 50, 110, 0, Math.PI*2); 
+            ctx.arc(cx, cy - 80, 70, 0, Math.PI*2); ctx.fill();
+            ctx.fillRect(cx - 65, cy - 80, 130, 140);
+            ctx.fillStyle = '#885522'; ctx.fillRect(cx - 10, cy - 160, 20, 40);
+            ctx.shadowBlur = 0; ctx.fillStyle = 'white';
+            ctx.beginPath(); ctx.ellipse(cx - 40, cy - 20, 25, 35, 0, 0, Math.PI*2); ctx.fill();
+            ctx.beginPath(); ctx.ellipse(cx + 40, cy - 20, 25, 35, 0, 0, Math.PI*2); ctx.fill();
+            ctx.fillStyle = 'black';
+            ctx.beginPath(); ctx.arc(cx - 40, cy - 20, 10, 0, Math.PI*2); ctx.fill();
+            ctx.beginPath(); ctx.arc(cx + 40, cy - 20, 10, 0, Math.PI*2); ctx.fill();
+            ctx.beginPath(); ctx.moveTo(cx-30, cy+40); ctx.lineTo(cx+30, cy+40); ctx.stroke();
+        }
+
+        const texture = new THREE.CanvasTexture(canvas);
+        // 使用 sRGBEncoding 让颜色更准确
+        texture.colorSpace = THREE.SRGBColorSpace;
+        texture.minFilter = THREE.LinearFilter;
+        return texture;
+    }
+
+    // --- 6. 标签与吉祥物系统 ---
+    const labelsData = [
+        { text: "夹钳圣诞快乐", type: "top" },
+        { text: "Mayday", color: "#00eeff" },
+        { text: "玛莎", color: "#ffffff" },
+        { text: "阿信.", color: "#44ffaa" },
+        { text: "言承旭", color: "#3388ff" },
+        { text: "Forever", color: "#ffdd00" },
+        { text: "石头", color: "#ff4444" },
+        { text: "怪兽", color: "#bb55ff" },
+        { text: "冠佑", color: "#ff99cc" },
+        { text: "🥕", color: "#dddddd" }
+    ];
+
+    const mascotsData = [
+        { type: 'carrot', y: 12 },
+        { type: 'peas', y: 2 },
+        { type: 'banana', y: -8 },
+        { type: 'pear', y: -18 }
+    ];
+
+    const labelMeshes = [];
+
+    // 字体清晰度优化重点
+    function createLabelTexture(text, color, isTop, randomScale = 1) {
+        const canvas = document.createElement('canvas');
+        canvas.width = 2048; canvas.height = 512; // 高分辨率
+        const ctx = canvas.getContext('2d');
+
+        let baseFontSize = isTop ? 325 : 250;
+        let fontSize = baseFontSize * randomScale;
+
+        // 关键修改：去掉 bold，使用更现代的无衬线字体
+        const fontFamily = '"Verdana", "Arial", sans-serif';
+
+        if (isTop) {
+            // 顶部文字可以稍微粗一点，但不要太糊
+            ctx.font = `bold ${fontSize}px ${fontFamily}`;
+            ctx.fillStyle = '#ffffff';
+            ctx.textAlign = 'center';
+            ctx.textBaseline = 'middle';
+            // 降低阴影模糊半径，防止光晕过重导致字形粘连
+            ctx.shadowBlur = 20; 
+            ctx.shadowColor = '#00ffff';
+            ctx.fillText(text, 1024, 256);
+        } else {
+            const iconX = 256;
+            const iconY = 256;
+            const iconRadius = fontSize * 0.4;
+
+            const richColor = new THREE.Color(color);
+            richColor.offsetHSL(0, 0.2, -0.05); 
+            const richColorStyle = `#${richColor.getHexString()}`;
+
+            // 图标背景
+            ctx.shadowBlur = 30;
+            ctx.shadowColor = richColorStyle;
+            ctx.fillStyle = richColorStyle;
+            ctx.beginPath();
+            ctx.arc(iconX, iconY, iconRadius, 0, Math.PI*2);
+            ctx.fill();
+
+            // 图标内的字
+            ctx.shadowBlur = 0; // 内部字不要光晕
+            ctx.fillStyle = '#fff';
+            // 使用 normal 权重
+            ctx.font = `normal ${fontSize * 0.6}px ${fontFamily}`;
+            ctx.textAlign = 'center';
+            ctx.textBaseline = 'middle';
+            ctx.fillText(text.charAt(0).toUpperCase(), iconX, iconY + 10);
+
+            // 右侧文字：彻底优化
+            ctx.textAlign = 'left';
+            
+            // 1. 去掉文字本身的强光晕，依靠全局 Bloom
+            ctx.shadowBlur = 0; 
+            // ctx.shadowColor = richColorStyle; // 移除文字阴影颜色
+            
+            ctx.fillStyle = '#ffffff'; // 纯白字在 Bloom 下最亮
+            // 2. 使用 normal 权重，字形更细
+            ctx.font = `normal ${fontSize}px ${fontFamily}`;
+            
+            // 3. 稍微增加一点字间距（Canvas原生不支持letter-spacing，这里微调位置）
+            ctx.fillText(text, iconX + iconRadius + 50, 256);
+        }
+        const tex = new THREE.CanvasTexture(canvas);
+        tex.colorSpace = THREE.SRGBColorSpace; // 颜色校正
+        tex.minFilter = THREE.LinearFilter;
+        return tex;
+    }
+
+    function initLabelsAndMascots() {
+        const container = document.getElementById('inputs-container');
+        container.innerHTML = '';
+
+        labelsData.forEach((item, i) => {
+            const div = document.createElement('div');
+            div.className = 'input-group';
+            div.innerHTML = `<label>${item.type === 'top' ? '★ 顶部文字' : 'Logo ' + i}</label>`;
+            const input = document.createElement('input');
+            input.value = item.text;
+            const randomScale = item.type === 'top' ? 1 : (0.9 + Math.random() * 0.3);
+            item.randomScale = randomScale;
+
+            input.addEventListener('input', (e) => updateLabel(i, e.target.value));
+            div.appendChild(input);
+            container.appendChild(div);
+
+            const texture = createLabelTexture(item.text, item.color, item.type === 'top', randomScale);
+            const material = new THREE.SpriteMaterial({ 
+                map: texture, 
+                transparent: true, 
+                depthWrite: false 
+            });
+            const sprite = new THREE.Sprite(material);
+
+            if (item.type === 'top') {
+                sprite.position.set(0, 23, 0);
+                sprite.scale.set(30, 7.5, 1);
+            } else {
+                const labelIndex = i - 1;
+                const totalSideLabels = labelsData.length - 1;
+                const h = 42; 
+                const yTop = h / 2;
+                const yBottom = -h / 2;
+                const ratio = labelIndex / (totalSideLabels - 1);
+                const y = yTop * (1 - ratio) + yBottom * ratio; 
+
+                const relYForShape = (y - yBottom) / h;
+                const baseRadiusAtHeight = 22 * Math.pow(relYForShape, 1.2);
+                const radius = baseRadiusAtHeight + 8; 
+
+                const phi = Math.PI * (3 - Math.sqrt(5)); 
+                const angle = labelIndex * phi + Math.PI/3;
+
+                sprite.position.set(Math.cos(angle)*radius, y, Math.sin(angle)*radius);
+                const baseScale = 25;
+                sprite.scale.set(baseScale * randomScale, baseScale * 0.25 * randomScale, 1);
+            }
+
+            scene.add(sprite);
+            labelMeshes.push({ mesh: sprite, data: item });
+        });
+
+        mascotsData.forEach((item) => {
+            const texture = createMascotTexture(item.type);
+            const material = new THREE.SpriteMaterial({
+                map: texture,
+                transparent: true,
+                depthWrite: false
+            });
+            const sprite = new THREE.Sprite(material);
+            
+            const h = 42;
+            const yBottom = -21;
+            const relY = (item.y - yBottom) / h;
+            const radius = 22 * Math.pow(relY, 1.2) + 6; 
+            const angle = Math.random() * Math.PI * 2; 
+
+            sprite.position.set(Math.cos(angle)*radius, item.y, Math.sin(angle)*radius);
+            
+            // 保持胡萝卜巨大化
+            let scale = 6;
+            if (item.type === 'carrot') scale = 12; 
+            sprite.scale.set(scale, scale, 1);
+
+            scene.add(sprite);
+        });
+    }
+
+    function updateLabel(index, newText) {
+        const target = labelMeshes[index];
+        target.data.text = newText;
+        target.mesh.material.map.dispose();
+        target.mesh.material.map = createLabelTexture(newText, target.data.color, target.data.type === 'top', target.data.randomScale);
+    }
+
+    initLabelsAndMascots();
+
+    // --- 7. 后处理 (Bloom) ---
+    const renderScene = new RenderPass(scene, camera);
+    const bloomPass = new UnrealBloomPass(new THREE.Vector2(window.innerWidth, window.innerHeight), 1.5, 0.4, 0.85);
+    // 稍微降低阈值，但减小强度，让字看起来不那么糊
+    bloomPass.threshold = 0.15; 
+    bloomPass.strength = 0.8; // 从 1.0 降到 0.8，防止文字过曝
+    bloomPass.radius = 0.5;   // 减小半径，让光晕更收敛
+
+    const composer = new EffectComposer(renderer);
+    composer.addPass(renderScene);
+    composer.addPass(bloomPass);
+
+    // --- 8. 动画循环 ---
+    const clock = new THREE.Clock();
+
+    function animate() {
+        requestAnimationFrame(animate);
+        const time = clock.getElapsedTime();
+        
+        controls.update();
+        treeGroup.rotation.y = time * 0.08;
+
+        if(starParticles) {
+            starParticles.rotation.z = -time * 0.1;
+            starParticles.position.y = 23 + Math.sin(time * 1.5) * 0.3;
+        }
+
+        if(bgStars) {
+            const sizes = bgStars.geometry.attributes.size.array;
+            const initialSizes = bgStars.geometry.userData.initialSizes;
+            for(let i=0; i < sizes.length; i++) {
+                const flash = Math.sin(time * 5.0 + i * 1.2); 
+                const scale = flash > 0.8 ? 2.5 : (0.8 + 0.2 * Math.sin(time * 2 + i));
+                sizes[i] = initialSizes[i] * scale;
+            }
+            bgStars.geometry.attributes.size.needsUpdate = true;
+            bgStars.rotation.y = -time * 0.01;
+        }
+
+        if(floorPoints) {
+            const positions = floorPoints.geometry.attributes.position.array;
+            for(let i=0; i < positions.length / 3; i++) {
+                const x = positions[i*3];
+                const z = positions[i*3+2];
+                // 修正：无限正方形波浪，在边缘处逐渐衰减或保持一致
+                const y = Math.sin(x * 0.02 + time * 0.6) * 2.0 + Math.cos(z * 0.025 + time * 0.4) * 2.0 - 25;
+                positions[i*3+1] = y;
+            }
+            floorPoints.geometry.attributes.position.needsUpdate = true;
+        }
+
+        const topText = labelMeshes[0].mesh;
+        topText.position.y = 23 + Math.sin(time * 1.5) * 0.3;
+
+        composer.render();
+    }
+
+    window.addEventListener('resize', () => {
+        camera.aspect = window.innerWidth / window.innerHeight;
+        camera.updateProjectionMatrix();
+        renderer.setSize(window.innerWidth, window.innerHeight);
+        composer.setSize(window.innerWidth, window.innerHeight);
+    });
+
+    animate();
+
+</script>
+</body>
+</html>
